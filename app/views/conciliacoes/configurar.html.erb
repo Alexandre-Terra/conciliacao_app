@@ -1,0 +1,166 @@
+<div class="card">
+  <h2>Configurar Colunas</h2>
+  <p class="subtitle">Informe em qual linha estão os cabeçalhos e os nomes das colunas de cada arquivo.</p>
+
+  <% if flash[:error] %>
+    <div class="alert alert-error"><%= flash[:error] %></div>
+  <% end %>
+
+  <%= form_with url: processar_path, local: true do |f| %>
+
+    <div class="section">
+      <h3>Extrato Bancário</h3>
+
+      <% banco_hint = @banco_headers.any? ? "Colunas detectadas: #{@banco_headers.join(', ')}" : "" %>
+      <% if banco_hint.present? %>
+        <p class="hint"><%= banco_hint %></p>
+      <% end %>
+
+      <div class="form-row">
+        <div class="form-group half">
+          <label>Linha do cabeçalho (número)</label>
+          <%= f.number_field :banco_header_row, value: 9, min: 1, required: true %>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group half">
+          <label>Coluna de Data</label>
+          <%= f.text_field :banco_date_col, value: "Data", required: true %>
+        </div>
+        <div class="form-group half">
+          <label>Coluna de Valor</label>
+          <%= f.text_field :banco_value_col, value: "Valor (R$)", required: true %>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group half">
+          <label>Coluna de Descrição</label>
+          <%= f.text_field :banco_desc_col, value: "Descrição", required: true %>
+        </div>
+        <div class="form-group half">
+          <label>Coluna de Documento (opcional)</label>
+          <%= f.text_field :banco_doc_col, value: "Documento" %>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h3>Lançamentos ERP</h3>
+
+      <% erp_hint = @erp_headers.any? ? "Colunas detectadas: #{@erp_headers.join(', ')}" : "" %>
+      <% if erp_hint.present? %>
+        <p class="hint"><%= erp_hint %></p>
+      <% end %>
+
+      <div class="form-row">
+        <div class="form-group half">
+          <label>Linha do cabeçalho (número)</label>
+          <%= f.number_field :erp_header_row, value: 1, min: 1, required: true %>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group half">
+          <label>Coluna de Data</label>
+          <%= f.text_field :erp_date_col, value: "DATA", required: true %>
+        </div>
+        <div class="form-group half">
+          <label>Coluna de Histórico / Descrição</label>
+          <%= f.text_field :erp_desc_col, value: "HISTORICO", required: true %>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group third">
+          <label>Coluna de Crédito (ValCred)</label>
+          <%= f.text_field :erp_valcred_col, value: "VALCRED", required: true %>
+        </div>
+        <div class="form-group third">
+          <label>Coluna de Débito (ValDeb)</label>
+          <%= f.text_field :erp_valdeb_col, value: "VALDEB", required: true %>
+        </div>
+        <div class="form-group third">
+          <label>Coluna TP (tipo efetivado)</label>
+          <%= f.text_field :erp_tp_col, value: "TP" %>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group half">
+          <label>Coluna de Documento (opcional)</label>
+          <%= f.text_field :erp_doc_col, value: "NUMDOCUMENTO" %>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <%= link_to "← Voltar", root_path, class: "btn btn-secondary" %>
+      <%= f.submit "Conciliar", class: "btn btn-primary", id: "btn-conciliar" %>
+    </div>
+
+  <% end %>
+</div>
+
+<div id="loading-overlay" class="loading-overlay" style="display:none;">
+  <div class="loading-card">
+    <h3>Conciliando...</h3>
+    <div class="loading-steps">
+      <div class="loading-step" data-step="0">Lendo planilhas...</div>
+      <div class="loading-step" data-step="1">Alg 1 — Casamento Exato (Data + Valor)</div>
+      <div class="loading-step" data-step="2">Alg 2 — Saldo Diário</div>
+      <div class="loading-step" data-step="3">Alg 3 — Combinação (2 a 6)</div>
+      <div class="loading-step" data-step="4">Gerando relatórios...</div>
+    </div>
+    <div class="loading-bar-track">
+      <div class="loading-bar-fill" id="loading-bar-fill"></div>
+    </div>
+    <p class="loading-status" id="loading-status">Lendo planilhas...</p>
+  </div>
+</div>
+
+<script>
+  document.getElementById("btn-conciliar").addEventListener("click", function(e) {
+    var form = this.closest("form");
+    if (!form.checkValidity()) return;
+
+    var overlay = document.getElementById("loading-overlay");
+    var bar = document.getElementById("loading-bar-fill");
+    var status = document.getElementById("loading-status");
+    var steps = overlay.querySelectorAll(".loading-step");
+
+    overlay.style.display = "flex";
+
+    var labels = [];
+    for (var i = 0; i < steps.length; i++) {
+      labels.push(steps[i].textContent);
+    }
+
+    var current = 0;
+    var total = labels.length;
+
+    function activate(idx) {
+      for (var j = 0; j < steps.length; j++) {
+        steps[j].classList.toggle("active", j === idx);
+        steps[j].classList.toggle("done", j < idx);
+      }
+      status.textContent = labels[idx];
+      bar.style.width = ((idx + 1) / total * 100) + "%";
+    }
+
+    activate(0);
+
+    var interval = setInterval(function() {
+      current++;
+      if (current >= total - 1) {
+        clearInterval(interval);
+        activate(total - 1);
+        bar.classList.add("loading-bar-pulse");
+        status.textContent = "Finalizando, aguarde...";
+        return;
+      }
+      activate(current);
+    }, 800);
+  });
+</script>

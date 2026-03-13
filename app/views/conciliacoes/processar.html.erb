@@ -1,0 +1,118 @@
+<div class="card">
+  <h2>Resultado da Conciliação</h2>
+
+  <div class="algo-section">
+    <h3 class="algo-title algo-title-1">Algoritmo 1 — Casamento Exato (Data + Valor ±R$ 0,01)</h3>
+    <div class="stats-grid">
+      <div class="stat-box stat-total">
+        <div class="stat-value"><%= @stats_alg1[:total_banco] %></div>
+        <div class="stat-label">Total Banco</div>
+      </div>
+      <div class="stat-box stat-total">
+        <div class="stat-value"><%= @stats_alg1[:total_erp] %></div>
+        <div class="stat-label">Total ERP</div>
+      </div>
+      <div class="stat-box stat-ok">
+        <div class="stat-value"><%= @stats_alg1[:conciliados] %></div>
+        <div class="stat-label">Conciliados</div>
+      </div>
+      <div class="stat-box stat-ok">
+        <div class="stat-value"><%= @stats_alg1[:taxa_conciliacao_banco] %>%</div>
+        <div class="stat-label">Taxa Banco</div>
+      </div>
+      <div class="stat-box stat-warn">
+        <div class="stat-value"><%= @stats_alg1[:banco_sem_par] %></div>
+        <div class="stat-label">Banco s/ par</div>
+      </div>
+      <div class="stat-box stat-warn">
+        <div class="stat-value"><%= @stats_alg1[:erp_sem_par] %></div>
+        <div class="stat-label">ERP s/ par</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="algo-arrow">↓ pendentes do Alg. 1 entram no Alg. 2</div>
+
+  <div class="algo-section">
+    <h3 class="algo-title algo-title-2">Algoritmo 2 — Saldo Diário (Total do Dia ±R$ 0,05)</h3>
+    <div class="stats-grid">
+      <div class="stat-box stat-total">
+        <div class="stat-value"><%= @stats_alg2[:banco_entrada] %></div>
+        <div class="stat-label">Banco entrada</div>
+      </div>
+      <div class="stat-box stat-total">
+        <div class="stat-value"><%= @stats_alg2[:erp_entrada] %></div>
+        <div class="stat-label">ERP entrada</div>
+      </div>
+      <div class="stat-box stat-ok">
+        <div class="stat-value"><%= @stats_alg2[:dias_conciliados] %></div>
+        <div class="stat-label">Dias conciliados</div>
+      </div>
+      <div class="stat-box stat-ok">
+        <div class="stat-value"><%= @stats_alg2[:banco_conciliados] %></div>
+        <div class="stat-label">Banco conciliados</div>
+      </div>
+      <div class="stat-box stat-warn">
+        <div class="stat-value"><%= @stats_alg2[:banco_sem_par] %></div>
+        <div class="stat-label">Banco s/ par</div>
+      </div>
+      <div class="stat-box stat-warn">
+        <div class="stat-value"><%= @stats_alg2[:erp_sem_par] %></div>
+        <div class="stat-label">ERP s/ par</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="algo-arrow">↓ pendentes do Alg. 2 entram no Alg. 3</div>
+
+  <div class="algo-section">
+    <h3 class="algo-title algo-title-3">Algoritmo 3 — Combinação de Dois (soma de 2 registros no mesmo dia)</h3>
+    <div class="stats-grid">
+      <div class="stat-box stat-total">
+        <div class="stat-value"><%= @stats_alg3[:banco_entrada] %></div>
+        <div class="stat-label">Banco entrada</div>
+      </div>
+      <div class="stat-box stat-total">
+        <div class="stat-value"><%= @stats_alg3[:erp_entrada] %></div>
+        <div class="stat-label">ERP entrada</div>
+      </div>
+      <div class="stat-box stat-ok">
+        <div class="stat-value"><%= @stats_alg3[:grupos_conciliados] %></div>
+        <div class="stat-label">Grupos casados</div>
+      </div>
+      <div class="stat-box stat-ok">
+        <div class="stat-value"><%= @stats_alg3[:banco_conciliados] %></div>
+        <div class="stat-label">Banco conciliados</div>
+      </div>
+      <div class="stat-box stat-warn">
+        <div class="stat-value"><%= @stats_alg3[:banco_sem_par] %></div>
+        <div class="stat-label">Banco s/ par</div>
+      </div>
+      <div class="stat-box stat-warn">
+        <div class="stat-value"><%= @stats_alg3[:erp_sem_par] %></div>
+        <div class="stat-label">ERP s/ par</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="download-section">
+    <h3>Download dos Resultados</h3>
+    <div class="download-buttons">
+      <%= link_to download_path(uuid: @uuid, tipo: "conciliados"),
+            class: "btn btn-download btn-green" do %>
+        Baixar conciliados.xlsx
+        <span class="btn-sub">3 abas: Exato · Saldo Diário · Combinação</span>
+      <% end %>
+
+      <%= link_to download_path(uuid: @uuid, tipo: "pendentes"),
+            class: "btn btn-download btn-orange" do %>
+        Baixar pendentes.xlsx
+        <span class="btn-sub"><%= @stats_alg3[:banco_sem_par] %> banco + <%= @stats_alg3[:erp_sem_par] %> ERP — 2 abas</span>
+      <% end %>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <%= link_to "Nova Conciliação", root_path, class: "btn btn-secondary" %>
+  </div>
+</div>
