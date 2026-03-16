@@ -17,6 +17,15 @@
       <%= f.file_field :erp_file, accept: ".xls,.xlsx", required: true %>
     </div>
 
+    <div class="privacy-notice">
+      <p>
+        🔒 <strong>Privacidade:</strong> os arquivos enviados são processados exclusivamente
+        neste servidor e removidos automaticamente após 2 horas. Nenhum dado é armazenado
+        permanentemente nem compartilhado com terceiros.
+        <%= link_to "Política de Privacidade completa", privacidade_path %>
+      </p>
+    </div>
+
     <div class="form-actions">
       <%= f.submit "Avançar →", class: "btn btn-primary" %>
     </div>
