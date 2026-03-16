@@ -1,4 +1,5 @@
 require_relative "boot"
+require_relative "../lib/middleware/upload_size_limiter"
 
 require "rails"
 # Pick the frameworks you want:
@@ -12,7 +13,7 @@ require "action_controller/railtie"
 # require "action_text/engine"
 require "action_view/railtie"
 # require "action_cable/engine"
-# require "rails/test_unit/railtie"
+require "rails/test_unit/railtie"
 
 # Require the gems listed in Gemfile, including any gems
 # you've limited to :test, :development, or :production.
@@ -26,7 +27,9 @@ module ConciliacaoApp
     # Please, add to the `ignore` list any other `lib` subdirectories that do
     # not contain `.rb` files, or that should not be reloaded or eager loaded.
     # Common ones are `templates`, `generators`, or `middleware`, for example.
-    config.autoload_lib(ignore: %w[assets tasks])
+    config.autoload_lib(ignore: %w[assets tasks middleware])
+
+    config.middleware.insert_before 0, UploadSizeLimiter
 
     # Configuration for the application, engines, and railties goes here.
     #

@@ -3,6 +3,12 @@ require "securerandom"
 class ConciliacoesController < ApplicationController
   protect_from_forgery with: :exception
 
+  ALLOWED_EXTENSIONS   = %w[.xls .xlsx].freeze
+  ALLOWED_CONTENT_TYPES = %w[
+    application/vnd.ms-excel
+    application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+  ].freeze
+
   # GET /
   def new
   end
@@ -14,6 +20,12 @@ class ConciliacoesController < ApplicationController
 
     unless banco_file.present? && erp_file.present?
       flash[:error] = "Por favor, envie os dois arquivos."
+      return redirect_to root_path
+    end
+
+    error = validate_upload(banco_file) || validate_upload(erp_file)
+    if error
+      flash[:error] = error
       return redirect_to root_path
     end
 
@@ -98,12 +110,26 @@ class ConciliacoesController < ApplicationController
     @stats_alg2 = resultado_alg2[:stats]
     @stats_alg3 = resultado_alg3[:stats]
     @uuid       = uuid
+  rescue Rack::Timeout::RequestTimeoutException
+    info = request.env["rack-timeout.info"]
+    Rails.logger.error(
+      "timeout request_id=#{request.request_id} " \
+      "duration=#{info&.fetch(:service, '?')&.round(1)}s " \
+      "limit=#{info&.fetch(:timeout, '?')}s"
+    )
+    flash[:error] = "O processamento excedeu o tempo limite de 90s. " \
+                    "Tente com planilhas menores ou reduza o número de registros."
+    redirect_to configurar_path
   rescue ArgumentError => e
     flash[:error] = "Erro de configuração: #{e.message}"
     redirect_to configurar_path
   rescue => e
     flash[:error] = "Erro ao processar: #{e.message}"
     redirect_to configurar_path
+  end
+
+  # GET /privacidade
+  def privacidade
   end
 
   # GET /download/:uuid/:tipo
@@ -128,6 +154,24 @@ class ConciliacoesController < ApplicationController
   end
 
   private
+
+  def validate_upload(file)
+    ext = File.extname(file.original_filename).downcase
+    unless ALLOWED_EXTENSIONS.include?(ext)
+      return "Formato inválido. Apenas .xls e .xlsx são aceitos."
+    end
+
+    unless ALLOWED_CONTENT_TYPES.include?(file.content_type)
+      return "Tipo de arquivo inválido. Envie uma planilha Excel válida."
+    end
+
+    max_bytes = ENV.fetch("MAX_UPLOAD_SIZE_MB", "20").to_i * 1_024 * 1_024
+    if file.size > max_bytes
+      return "Arquivo excede o tamanho máximo de #{ENV.fetch('MAX_UPLOAD_SIZE_MB', '20')}MB."
+    end
+
+    nil
+  end
 
   def tmp_dir(uuid)
     Rails.root.join("tmp", "conciliacao", uuid).to_s
