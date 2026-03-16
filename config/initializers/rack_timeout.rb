@@ -9,9 +9,11 @@
 # ENV RACK_TIMEOUT_SERVICE_SECONDS — permite ajuste sem redeploy.
 
 if Rails.env.production?
-  Rack::Timeout.service_timeout = ENV.fetch("RACK_TIMEOUT_SERVICE_SECONDS", "90").to_i
-
-  # wait_timeout = 0 desabilita o timeout de fila do Puma.
-  # O Render gerencia conexões ociosas na camada de proxy.
-  Rack::Timeout.wait_timeout = 0
+  # rack-timeout 0.7+ não tem setter de classe; o timeout é passado como opção
+  # ao inserir o middleware. wait_timeout: 0 desabilita timeout de fila do Puma.
+  Rails.application.config.middleware.use(
+    Rack::Timeout,
+    service_timeout: ENV.fetch("RACK_TIMEOUT_SERVICE_SECONDS", "90").to_i,
+    wait_timeout: 0
+  )
 end
