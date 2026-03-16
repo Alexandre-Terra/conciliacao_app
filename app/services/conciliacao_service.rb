@@ -12,6 +12,7 @@ class ConciliacaoService
   #   erp_sem_par:    [{...}, ...]
   #   stats:          Hash
   def executar
+    t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     banco_disponivel = @banco.map { |r| r.merge(conciliado: false) }
     erp_disponivel   = @erp.map   { |r| r.merge(conciliado: false) }
 
@@ -37,6 +38,15 @@ class ConciliacaoService
     erp_sem_par   = erp_disponivel.reject   { |r| r[:conciliado] }.each { |r| r.delete(:conciliado) }
 
     total_banco = @banco.size
+    taxa = total_banco > 0 ? (conciliados.size.to_f / total_banco * 100).round(1) : 0
+
+    Rails.logger.info({ event: "conciliacao.alg1_exato",
+                        banco_in: total_banco, erp_in: @erp.size,
+                        conciliados: conciliados.size,
+                        banco_sem_par: banco_sem_par.size, erp_sem_par: erp_sem_par.size,
+                        taxa_pct: taxa,
+                        duration_ms: ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round }.to_json)
+
     {
       conciliados:   conciliados,
       banco_sem_par: banco_sem_par,
@@ -47,7 +57,7 @@ class ConciliacaoService
         conciliados:            conciliados.size,
         banco_sem_par:          banco_sem_par.size,
         erp_sem_par:            erp_sem_par.size,
-        taxa_conciliacao_banco: total_banco > 0 ? (conciliados.size.to_f / total_banco * 100).round(1) : 0
+        taxa_conciliacao_banco: taxa
       }
     }
   end

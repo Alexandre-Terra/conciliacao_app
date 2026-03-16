@@ -9,6 +9,7 @@ class ConciliacaoCombinacaoService
   end
 
   def executar
+    t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     conciliados = []
     banco_por_data = @banco.group_by { |r| r[:data] }
     erp_por_data   = @erp.group_by   { |r| r[:data] }
@@ -37,6 +38,13 @@ class ConciliacaoCombinacaoService
     erp_sem_par   = erp_por_data.values.flatten
     banco_conciliados = conciliados.sum { |c| c[:banco].size }
     erp_conciliados   = conciliados.sum { |c| c[:erp].size }
+
+    Rails.logger.info({ event: "conciliacao.alg3_combinacao",
+                        banco_in: @banco.size, erp_in: @erp.size,
+                        grupos_conciliados: conciliados.size,
+                        banco_conciliados: banco_conciliados, erp_conciliados: erp_conciliados,
+                        banco_sem_par: banco_sem_par.size, erp_sem_par: erp_sem_par.size,
+                        duration_ms: ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round }.to_json)
 
     {
       conciliados:   conciliados,

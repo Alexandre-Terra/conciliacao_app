@@ -27,6 +27,7 @@ class PlanilhaReader
 
   # Retorna Array of Hashes com chaves normalizadas para o banco
   def registros_banco
+    t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     headers, rows = headers_and_rows
     date_idx  = col_index(headers, @config[:date_col])
     value_idx = col_index(headers, @config[:value_col])
@@ -47,11 +48,15 @@ class PlanilhaReader
         documento: doc_idx ? row[doc_idx].to_s.strip : ""
       }
     end
+    Rails.logger.info({ event: "planilha_reader.banco", rows_read: rows.size,
+                        records: registros.size, skipped: rows.size - registros.size,
+                        duration_ms: ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round }.to_json)
     registros
   end
 
   # Retorna Array of Hashes com chaves normalizadas para o ERP
   def registros_erp
+    t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     headers, rows = headers_and_rows
     date_idx    = col_index(headers, @config[:date_col])
     valcred_idx = col_index(headers, @config[:valcred_col])
@@ -80,6 +85,9 @@ class PlanilhaReader
         tp:            tp_idx ? row[tp_idx].to_s.strip : ""
       }
     end
+    Rails.logger.info({ event: "planilha_reader.erp", rows_read: rows.size,
+                        records: registros.size, skipped: rows.size - registros.size,
+                        duration_ms: ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round }.to_json)
     registros
   end
 

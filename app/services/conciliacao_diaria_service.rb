@@ -12,6 +12,7 @@ class ConciliacaoDiariaService
   #   erp_sem_par:      [{...}, ...]
   #   stats:            Hash
   def executar
+    t0 = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     banco_por_data = agrupar_por_data(@banco)
     erp_por_data   = agrupar_por_data(@erp)
 
@@ -49,6 +50,14 @@ class ConciliacaoDiariaService
 
     registros_banco_conciliados = dias_conciliados.sum { |d| d[:banco].size }
     registros_erp_conciliados   = dias_conciliados.sum { |d| d[:erp].size }
+
+    Rails.logger.info({ event: "conciliacao.alg2_diario",
+                        banco_in: @banco.size, erp_in: @erp.size,
+                        dias_conciliados: dias_conciliados.size,
+                        banco_conciliados: registros_banco_conciliados,
+                        erp_conciliados: registros_erp_conciliados,
+                        banco_sem_par: banco_sem_par.size, erp_sem_par: erp_sem_par.size,
+                        duration_ms: ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - t0) * 1000).round }.to_json)
 
     {
       dias_conciliados:           dias_conciliados,
