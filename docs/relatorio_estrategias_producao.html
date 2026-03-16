@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <title>Relatório de Estratégias de Produção - conciliacao_app</title>
+  <style>
+    body {
+      font-family: "DejaVu Sans", Arial, sans-serif;
+      margin: 28px;
+      color: #111;
+      line-height: 1.45;
+      font-size: 11pt;
+    }
+    h1, h2, h3 {
+      color: #0b3a5b;
+      margin-top: 20px;
+      margin-bottom: 8px;
+    }
+    h1 { font-size: 22px; }
+    h2 { font-size: 16px; border-bottom: 1px solid #dcdcdc; padding-bottom: 4px; }
+    h3 { font-size: 13px; }
+    p { margin: 6px 0; }
+    ul { margin-top: 4px; margin-bottom: 8px; }
+    li { margin: 3px 0; }
+    code {
+      font-family: "DejaVu Sans Mono", monospace;
+      background: #f1f4f7;
+      padding: 0 3px;
+      border-radius: 3px;
+      font-size: 10pt;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 10px 0 14px 0;
+      font-size: 10pt;
+    }
+    th, td {
+      border: 1px solid #cfd8e3;
+      padding: 6px;
+      vertical-align: top;
+    }
+    th {
+      background: #e9f0f7;
+      text-align: left;
+    }
+    .small {
+      font-size: 9pt;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <h1>Relatório de Estratégias de Produção para o conciliacao_app</h1>
+  <p><strong>Data da análise:</strong> 13/03/2026</p>
+  <p><strong>Escopo:</strong> análise técnica comparativa sem alterações no projeto.</p>
+
+  <h2>Resumo Executivo</h2>
+  <p>O app atual (Rails 8.1, sem banco, processamento síncrono e uso de <code>tmp/conciliacao/&lt;uuid&gt;</code>) é compatível com entrada rápida em plataforma gerenciada desde que exista disco persistente local por instância. O principal risco atual é escalar horizontalmente sem storage compartilhado/sessão consistente, além de timeout em requests longas.</p>
+  <p>Para perfil de <strong>baixo custo inicial + operação gerenciada</strong>, a recomendação é iniciar com <strong>Render</strong> (alternativa direta: <strong>Railway</strong>) em arquitetura de 1 instância com disco, endurecer operação e evoluir para storage externo + processamento assíncrono antes de buscar alta escalabilidade/HA.</p>
+
+  <h2>1) Diagnóstico do projeto para produção</h2>
+  <h3>Requisitos operacionais derivados do código</h3>
+  <ul>
+    <li>Upload e artefatos salvos em filesystem local temporário: <code>tmp/conciliacao/&lt;uuid&gt;</code>.</li>
+    <li>Fluxo de múltiplas etapas depende de sessão com paths locais (<code>/upload -&gt; /configurar -&gt; /processar -&gt; /download</code>).</li>
+    <li>Sem banco/ActiveRecord no app; estado operacional está em sessão + disco local.</li>
+    <li>Processamento ocorre de forma síncrona dentro da request HTTP.</li>
+    <li>Não há rotina explícita de limpeza de <code>tmp/conciliacao</code>.</li>
+    <li>Em múltiplas réplicas, há risco de perda de continuidade quando requisições caem em instâncias diferentes.</li>
+    <li>TLS no Rails ainda não está forçado por padrão em produção (<code>force_ssl</code>/<code>assume_ssl</code> comentados).</li>
+    <li>Observabilidade inicial existe via logs STDOUT e healthcheck <code>/up</code>, mas sem alertas/métricas operacionais mínimos.</li>
+  </ul>
+
+  <h3>Checklist obrigatório antes do go-live</h3>
+  <ul>
+    <li>Definir limites de upload (tamanho, tipo de arquivo, validação de extensão/mime).</li>
+    <li>Implementar limpeza automática de temporários por TTL.</li>
+    <li>Definir retenção de arquivos e política LGPD (dados financeiros sensíveis).</li>
+    <li>Configurar timeout de aplicação abaixo do timeout da plataforma/proxy.</li>
+    <li>Habilitar HTTPS forçado em produção quando houver proxy SSL.</li>
+    <li>Configurar logs estruturados e rastreio por request_id.</li>
+    <li>Definir métricas/alertas: CPU, memória, disco, erro 5xx e latência p95/p99.</li>
+    <li>Executar teste de concorrência com uploads/processamentos simultâneos.</li>
+    <li>Validar rollback real em staging antes de produção.</li>
+  </ul>
+
+  <h2>2) Comparativo de estratégias (6 opções)</h2>
+
+  <h3>2.1 Render (Web Service + Disk)</h3>
+  <ul>
+    <li><strong>Arquitetura alvo:</strong> 1 web service + disk persistente anexado.</li>
+    <li><strong>Esforço de setup:</strong> baixo.</li>
+    <li><strong>Custo inicial estimado:</strong> US$ 9–15/mês (Starter + disk básico).</li>
+    <li><strong>Escalabilidade:</strong> boa para stateless; limitada para este app com disk local.</li>
+    <li><strong>Confiabilidade:</strong> boa no single-node; restrições para zero-downtime com disk.</li>
+    <li><strong>Segurança/compliance:</strong> TLS gerenciado, base gerenciada sólida.</li>
+    <li><strong>Lock-in:</strong> médio.</li>
+    <li><strong>Riscos para este app:</strong> filesystem local e sessão/afinidade podem quebrar em múltiplas instâncias.</li>
+    <li><strong>Quando usar:</strong> MVP de baixo custo e alta simplicidade.</li>
+    <li><strong>Quando evitar:</strong> necessidade imediata de HA ativa-ativa.</li>
+  </ul>
+
+  <h3>2.2 Railway (container managed)</h3>
+  <ul>
+    <li><strong>Arquitetura alvo:</strong> serviço web com volume persistente.</li>
+    <li><strong>Esforço de setup:</strong> baixo.</li>
+    <li><strong>Custo inicial estimado:</strong> US$ 5–15/mês (Hobby + uso + volume).</li>
+    <li><strong>Escalabilidade:</strong> com volume há limitações para múltiplas réplicas.</li>
+    <li><strong>Confiabilidade:</strong> boa para 1 réplica; pode ter breves interrupções em redeploy com volume.</li>
+    <li><strong>Segurança/compliance:</strong> SSL automático e operação gerenciada.</li>
+    <li><strong>Lock-in:</strong> médio.</li>
+    <li><strong>Riscos para este app:</strong> mesma dependência de storage local e continuidade de sessão.</li>
+    <li><strong>Quando usar:</strong> MVP econômico com setup rápido.</li>
+    <li><strong>Quando evitar:</strong> necessidade de escalar horizontalmente sem refatorar estado.</li>
+  </ul>
+
+  <h3>2.3 Fly.io (Machines + Volume)</h3>
+  <ul>
+    <li><strong>Arquitetura alvo:</strong> machine(s) com volume local por máquina.</li>
+    <li><strong>Esforço de setup:</strong> médio.</li>
+    <li><strong>Custo inicial estimado:</strong> US$ 6–14/mês (compute pequeno + volume).</li>
+    <li><strong>Escalabilidade:</strong> flexível, inclusive multi-região; volume requer estratégia de dados.</li>
+    <li><strong>Confiabilidade:</strong> média-alta quando bem operado.</li>
+    <li><strong>Segurança/compliance:</strong> boa, com maior responsabilidade de operação.</li>
+    <li><strong>Lock-in:</strong> médio.</li>
+    <li><strong>Riscos para este app:</strong> paths locais/sessão local não compartilhados entre machines.</li>
+    <li><strong>Quando usar:</strong> custo baixo com maior controle técnico.</li>
+    <li><strong>Quando evitar:</strong> equipe sem tempo para operação mais fina.</li>
+  </ul>
+
+  <h3>2.4 Heroku (dyno/container)</h3>
+  <ul>
+    <li><strong>Arquitetura alvo:</strong> dyno web stateless.</li>
+    <li><strong>Esforço de setup:</strong> baixo.</li>
+    <li><strong>Custo inicial estimado:</strong> a partir de US$ 7/mês (sem incluir storage externo).</li>
+    <li><strong>Escalabilidade:</strong> simples para apps stateless.</li>
+    <li><strong>Confiabilidade:</strong> boa para desenho stateless.</li>
+    <li><strong>Segurança/compliance:</strong> plataforma madura.</li>
+    <li><strong>Lock-in:</strong> médio-alto.</li>
+    <li><strong>Riscos para este app:</strong> filesystem efêmero + timeout de request tornam o fit ruim sem refatoração.</li>
+    <li><strong>Quando usar:</strong> após mover arquivos para storage externo e reduzir síncrono longo.</li>
+    <li><strong>Quando evitar:</strong> cenário atual sem mudanças.</li>
+  </ul>
+
+  <h3>2.5 Kamal + VPS (Hetzner/DO/Linode)</h3>
+  <ul>
+    <li><strong>Arquitetura alvo:</strong> container em VPS via Kamal, com disco local/volume.</li>
+    <li><strong>Esforço de setup:</strong> médio-alto.</li>
+    <li><strong>Custo inicial estimado:</strong> US$ 4–12/mês (single VPS), maior em HA.</li>
+    <li><strong>Escalabilidade:</strong> alta flexibilidade, depende de operação do time.</li>
+    <li><strong>Confiabilidade:</strong> potencialmente alta com práticas maduras.</li>
+    <li><strong>Segurança/compliance:</strong> maior responsabilidade do time (hardening, backup, patching).</li>
+    <li><strong>Lock-in:</strong> baixo.</li>
+    <li><strong>Riscos para este app:</strong> risco operacional (monitoramento, backup, failover) mais do que técnico.</li>
+    <li><strong>Quando usar:</strong> busca por controle e baixo lock-in.</li>
+    <li><strong>Quando evitar:</strong> prioridade total em operação gerenciada.</li>
+  </ul>
+
+  <h3>2.6 Cloud Run / App Runner (serverless container)</h3>
+  <ul>
+    <li><strong>Arquitetura alvo:</strong> container stateless com escala automática.</li>
+    <li><strong>Esforço de setup:</strong> médio no deploy; alto para adequar o app atual.</li>
+    <li><strong>Custo inicial estimado:</strong> Cloud Run US$ 0–20/mês (baixo uso), App Runner US$ 5–30+/mês.</li>
+    <li><strong>Escalabilidade:</strong> excelente.</li>
+    <li><strong>Confiabilidade:</strong> alta quando app é stateless.</li>
+    <li><strong>Segurança/compliance:</strong> forte para ambientes enterprise.</li>
+    <li><strong>Lock-in:</strong> médio-alto.</li>
+    <li><strong>Riscos para este app:</strong> storage local efêmero e fluxo síncrono exigem refatoração.</li>
+    <li><strong>Quando usar:</strong> fase de alta confiabilidade/escala após desacoplamento de disco local.</li>
+    <li><strong>Quando evitar:</strong> lift-and-shift sem mudanças.</li>
+  </ul>
+
+  <h2>3) Matriz de trade-offs e decisão</h2>
+  <p><strong>Pesos aplicados (perfil atual):</strong> custo inicial 30%, operação gerenciada 25%, compatibilidade com app atual 25%, escalabilidade 10%, confiabilidade/rollback 10%.</p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Opção</th>
+        <th>Nota ponderada (0-5)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Render</td><td>4.40</td></tr>
+      <tr><td>Railway</td><td>4.38</td></tr>
+      <tr><td>Fly.io</td><td>3.95</td></tr>
+      <tr><td>Kamal + VPS</td><td>3.78</td></tr>
+      <tr><td>Cloud Run / App Runner</td><td>3.65</td></tr>
+      <tr><td>Heroku</td><td>3.25</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Ranking por cenário</h3>
+  <ul>
+    <li><strong>MVP econômico:</strong> 1) Render 2) Railway 3) Fly.io</li>
+    <li><strong>Crescimento moderado:</strong> 1) Render 2) Fly.io 3) Kamal+VPS</li>
+    <li><strong>Alta confiabilidade:</strong> 1) Cloud Run (com refatoração stateless) 2) Kamal+VPS (multi-host bem operado) 3) Render</li>
+  </ul>
+
+  <h2>4) Plano de evolução sem retrabalho</h2>
+  <h3>Fase 1: Plataforma gerenciada de entrada</h3>
+  <ul>
+    <li>Iniciar em Render (ou Railway) com 1 instância + disk/volume.</li>
+    <li>Aplicar checklist mínimo: limite de upload, TTL de arquivos, TLS e observabilidade básica.</li>
+  </ul>
+
+  <h3>Fase 2: Endurecimento operacional</h3>
+  <ul>
+    <li>Centralizar logs, criar alertas e painéis operacionais.</li>
+    <li>Definir backup/restore de temporários conforme retenção.</li>
+    <li>Formalizar limites de concorrência, timeout e políticas de retenção.</li>
+  </ul>
+
+  <h3>Fase 3: Migração para maior robustez</h3>
+  <ul>
+    <li>Externalizar arquivos para object storage (S3/R2/GCS ou equivalente).</li>
+    <li>Substituir sessão com path local por identificador de job/execução.</li>
+    <li>Mover processamento pesado para background e reduzir caminho síncrono.</li>
+    <li>Escolher trilha final: Kamal+VPS (controle/custo) ou Cloud enterprise (gerenciado/escala).</li>
+  </ul>
+
+  <h2>Validação aplicada ao relatório</h2>
+  <ul>
+    <li>Cada estratégia cobre explicitamente: deploy, domínio/TLS, persistência de temporários, escala e rollback.</li>
+    <li>Custos e limites alinhados com documentação/preços oficiais atuais (13/03/2026).</li>
+    <li>Trade-offs contextualizados ao comportamento real do app: upload + processamento síncrono + download.</li>
+  </ul>
+
+  <h2>Fontes oficiais consultadas</h2>
+  <p class="small">
+    Render: https://render.com/pricing, https://render.com/docs/web-services, https://render.com/docs/disks, https://render.com/docs/custom-domains, https://render.com/docs/rollbacks<br>
+    Railway: https://docs.railway.com/pricing, https://docs.railway.com/reference/pricing/plans, https://docs.railway.com/networking/public-networking, https://docs.railway.com/reference/public-domains, https://docs.railway.com/reference/volumes, https://docs.railway.com/deployments/deployment-actions<br>
+    Fly.io: https://fly.io/docs/about/pricing/, https://fly.io/docs/volumes/overview/, https://fly.io/docs/volumes/snapshots/, https://fly.io/docs/blueprints/rollback-guide/<br>
+    Heroku: https://www.heroku.com/pricing/, https://devcenter.heroku.com/articles/usage-and-billing, https://devcenter.heroku.com/articles/request-timeout, https://devcenter.heroku.com/articles/dynos, https://devcenter.heroku.com/articles/automated-certificate-management, https://devcenter.heroku.com/articles/releases<br>
+    Kamal/Rails: https://kamal-deploy.org/docs/configuration/proxy/, https://kamal-deploy.org/docs/commands/rollback/, https://guides.rubyonrails.org/getting_started.html<br>
+    VPS pricing: https://www.hetzner.com/de/press-release/new-cx-plans/, https://www.digitalocean.com/pricing/droplets, https://www.linode.com/pt/pricing<br>
+    Cloud Run: https://cloud.google.com/run/pricing, https://cloud.google.com/run/docs/container-contract, https://cloud.google.com/run/docs/configuring/request-timeout, https://docs.cloud.google.com/run/docs/rollouts-rollbacks-traffic-migration, https://cloud.google.com/run/docs/mapping-custom-domains<br>
+    App Runner: https://aws.amazon.com/apprunner/pricing/, https://docs.aws.amazon.com/apprunner/latest/dg/develop.html, https://docs.aws.amazon.com/apprunner/latest/dg/manage-custom-domains.html, https://docs.aws.amazon.com/apprunner/latest/dg/manage-deploy.html
+  </p>
+</body>
+</html>

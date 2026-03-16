@@ -1,0 +1,129 @@
+# Render Blueprint — Infrastructure as Code
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Deploy: conecte este repositório no painel do Render e o Blueprint será
+# detectado automaticamente. O deploy ocorre a cada push para a branch `main`.
+#
+# Antes do primeiro deploy, configure manualmente no painel:
+#   RAILS_MASTER_KEY  →  conteúdo de config/master.key  (NÃO commitar esse arquivo)
+#   ALLOWED_HOSTS     →  ajuste para o subdomínio real (ex: meuapp.onrender.com)
+
+services:
+  - type: web
+    name: conciliacao-app
+    runtime: docker
+    plan: starter          # $7/mês — upgrade para standard ($25) se precisar de mais RAM
+    region: oregon         # us-west-2; troque para frankfurt se a base de usuários for BR/EU
+    autoDeploy: true       # deploy automático a cada push para main
+
+    healthCheckPath: /up   # endpoint padrão do Rails (retorna 200 quando o app está pronto)
+
+    envVars:
+      - key: RAILS_ENV
+        value: production
+
+      - key: RAILS_LOG_LEVEL
+        value: info
+
+      # Inserir manualmente no painel do Render — nunca commitar
+      - key: RAILS_MASTER_KEY
+        sync: false
+
+      # Subdomínio do Render; adicionar outros domínios separados por vírgula se usar domínio próprio
+      # Ex: conciliacao-app.onrender.com,meudominio.com.br
+      - key: ALLOWED_HOSTS
+        value: conciliacao-app.onrender.com
+
+      # Thruster + Puma: 3 threads por processo é adequado para o plano starter (512 MB RAM)
+      - key: RAILS_MAX_THREADS
+        value: "3"
+
+      # Limite de upload configurável sem redeploy (padrão: 20 MB — ver Ticket 0.2)
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "20"
+
+    disk:
+      name: conciliacao-tmp
+      # Deve corresponder a Rails.root.join("tmp", "conciliacao") dentro do container
+      mountPath: /rails/tmp/conciliacao
+      sizeGB: 1
+
+  # ─── Staging ──────────────────────────────────────────────────────────────────
+  # Ambiente isolado para validar deploys antes de promover para produção.
+  # Deploy automático a cada push para a branch `staging`.
+  # Disco separado → dados de staging nunca misturam com produção.
+  #
+  # Antes do primeiro deploy, inserir manualmente no painel:
+  #   RAILS_MASTER_KEY → mesmo valor de produção (mesma app, mesmo master.key)
+  - type: web
+    name: conciliacao-app-staging
+    runtime: docker
+    plan: starter
+    region: oregon
+    branch: staging        # deploya a partir da branch staging
+    autoDeploy: true
+
+    healthCheckPath: /up
+
+    envVars:
+      - key: RAILS_ENV
+        value: production
+
+      - key: RAILS_LOG_LEVEL
+        value: debug         # mais verboso em staging para facilitar debug
+
+      - key: RAILS_MASTER_KEY
+        sync: false
+
+      - key: ALLOWED_HOSTS
+        value: conciliacao-app-staging.onrender.com
+
+      - key: RAILS_MAX_THREADS
+        value: "3"
+
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "20"
+
+      - key: TMP_CLEANUP_TTL_HOURS
+        value: "1"           # TTL mais curto em staging (dados de teste acumulam rápido)
+
+    disk:
+      name: conciliacao-tmp-staging   # disco isolado — independente do disco de produção
+      mountPath: /rails/tmp/conciliacao
+      sizeGB: 1
+
+  # ─── Limpeza automática de tmp (LGPD) ────────────────────────────────────────
+  #
+  # LIMITAÇÃO DO RENDER: discos persistentes só podem ser montados em UM serviço
+  # por vez. O cron job abaixo corre em container separado e NÃO tem acesso ao
+  # disco montado no serviço web acima.
+  #
+  # SOLUÇÃO: remover o `disk` do serviço web e montá-lo NESTE cron job.
+  # O serviço web passa a usar /rails/tmp/conciliacao no disco do cron, mas
+  # isso exige que os dois serviços referenciem o mesmo disco físico — o que
+  # o Render NÃO suporta nativamente com dois serviços simultâneos.
+  #
+  # ALTERNATIVA RECOMENDADA: adicionar um endpoint interno autenticado no Rails
+  # (ex: POST /internal/tmp_cleanup com token via ENV) e chamar via `startCommand`:
+  #   curl -X POST -H "Authorization: Bearer $CLEANUP_TOKEN" \
+  #        https://conciliacao-app.onrender.com/internal/tmp_cleanup
+  #
+  # Por ora, o cron job está declarado corretamente; ative-o após resolver
+  # a estratégia de acesso ao disco (ver TICKET 2.1 — notas de infra).
+  - type: cron
+    name: conciliacao-cleanup
+    runtime: docker
+    plan: starter
+    region: oregon
+    schedule: "*/30 * * * *"   # a cada 30 minutos
+    startCommand: bin/rails tmp:cleanup
+
+    envVars:
+      - key: RAILS_ENV
+        value: production
+
+      - key: RAILS_MASTER_KEY
+        sync: false
+
+      - key: TMP_CLEANUP_TTL_HOURS
+        value: "2"

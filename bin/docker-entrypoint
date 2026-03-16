@@ -1,3 +1,7 @@
 #!/bin/bash -e
 
+# Garante que o diretório de conciliação existe no primeiro boot,
+# antes do disco persistente do Render ser montado (ou em ambientes sem disco).
+mkdir -p /rails/tmp/conciliacao
+
 exec "${@}"

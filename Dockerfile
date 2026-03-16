@@ -69,9 +69,19 @@ USER 1000:1000
 COPY --chown=rails:rails --from=build "${BUNDLE_PATH}" "${BUNDLE_PATH}"
 COPY --chown=rails:rails --from=build /rails /rails
 
+# Garante que o diretório de uploads/conciliacao existe com permissões corretas.
+# Em produção será sobreposto pelo disco persistente do Render, mas precisa
+# existir na imagem para o primeiro boot funcionar sem erros.
+RUN mkdir -p /rails/tmp/conciliacao
+
 # Entrypoint prepares the database.
 ENTRYPOINT ["/rails/bin/docker-entrypoint"]
 
 # Start server via Thruster by default, this can be overwritten at runtime
 EXPOSE 80
+
+# Healthcheck para o Render (e qualquer orquestrador) detectar se o app está saudável.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD curl -f http://localhost/up || exit 1
+
 CMD ["./bin/thrust", "./bin/rails", "server"]
