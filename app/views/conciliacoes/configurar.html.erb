@@ -120,7 +120,7 @@
   </div>
 </div>
 
-<script>
+<script nonce="<%= content_security_policy_nonce %>">
   document.getElementById("btn-conciliar").addEventListener("click", function(e) {
     var form = this.closest("form");
     if (!form.checkValidity()) return;
