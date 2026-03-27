@@ -13,7 +13,7 @@ gem "jbuilder"
 gem "roo", "~> 2.10"
 gem "roo-xls"
 gem "spreadsheet", "~> 1.3"
-gem "caxlsx", "~> 4.1"
+gem "caxlsx", "~> 4.4"
 gem "csv"
 
 # Use Active Model has_secure_password [https://guides.rubyonrails.org/active_model_basics.html#securepassword]
