@@ -10,7 +10,7 @@ gem "puma", ">= 5.0"
 gem "importmap-rails"
 # Build JSON APIs with ease [https://github.com/rails/jbuilder]
 gem "jbuilder"
-gem "roo", "~> 2.10"
+gem "roo", "~> 3.0"
 gem "roo-xls"
 gem "spreadsheet", "~> 1.3"
 gem "caxlsx", "~> 4.1"
